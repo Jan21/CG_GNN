@@ -223,7 +223,7 @@ class ILPDataset(InMemoryDataset):
 
                 bounds = (0, self.upper_bound)
 
-                sol,val = solve_ilp(c=c.numpy(), A=A_eq, b=b_eq)
+                sol,_ = solve_ilp(c=c.numpy(), A=A_eq, b=b_eq)
 
                 gt_primals = torch.from_numpy(sol).to(torch.float)
                 # gt_duals = torch.from_numpy(l).to(torch.float)
