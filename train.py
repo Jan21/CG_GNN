@@ -14,7 +14,7 @@ import hydra
 from omegaconf import DictConfig, OmegaConf
 
 from data.data_preprocess import HeteroAddLaplacianEigenvectorPE, SubSample
-from data.dataset import LPDataset
+from data.dataset import LPDataset, ILPDataset
 from torch_geometric.transforms import Compose
 
 @hydra.main(config_path="conf", config_name="config")
@@ -28,15 +28,13 @@ def main(cfg: DictConfig):
 
     model_name = cfg.model.model_name
 
-    dataset = LPDataset(cfg.data.datapath,
+    dataset = ILPDataset(cfg.data.datapath,
                         extra_path=f'{cfg.other.ipm_restarts}restarts_'
                                          f'{cfg.model[model_name].lappe}lap_'
                                          f'{cfg.other.ipm_steps}steps'
                                          f'{"_upper_" + str(cfg.other.upper) if cfg.other.upper is not None else ""}',
                         upper_bound=cfg.other.upper,
-                        rand_starts=cfg.other.ipm_restarts,
-                        pre_transform=Compose([HeteroAddLaplacianEigenvectorPE(k=cfg.model[model_name].lappe),
-                                                     SubSample(cfg.other.ipm_steps)]))
+                        rand_starts=cfg.other.ipm_restarts)
 
     data = Datamodule(dataset, cfg.train.batchsize,cfg.data.num_workers)
 

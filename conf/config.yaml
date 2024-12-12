@@ -34,7 +34,7 @@ model:
     use_res: false  
   
 data:
-  datapath: '/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/knapsack/'
+  datapath: '/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/ind_set_ILP' #'/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/knapsack/'
   num_workers: 4
 
 other:

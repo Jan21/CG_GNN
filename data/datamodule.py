@@ -3,7 +3,7 @@ import pytorch_lightning as pl
 #from torch_geometric.loader import DataLoader
 from torch.utils.data import DataLoader
 
-from data.utils import collate_fn_ip
+from data.utils import collate_fn_ip, collate_fn_ilp
 
 
 class Datamodule(pl.LightningDataModule):
@@ -23,18 +23,18 @@ class Datamodule(pl.LightningDataModule):
                                 batch_size=self.batch_size,
                                 shuffle=True,
                                 num_workers=self.num_workers,
-                                collate_fn=collate_fn_ip)
+                                collate_fn=collate_fn_ilp)
 
     def val_dataloader(self):
         return DataLoader(self.val_dataset,
                           batch_size=self.batch_size,
                           shuffle=False,
                           num_workers=self.num_workers,
-                          collate_fn=collate_fn_ip)
+                          collate_fn=collate_fn_ilp)
 
     def test_dataloader(self):
         return DataLoader(self.test_dataset,
                           batch_size=self.batch_size,
                           shuffle=False,
                           num_workers=self.num_workers,
-                          collate_fn=collate_fn_ip)
+                          collate_fn=collate_fn_ilp)
