@@ -1,0 +1,54 @@
+train:
+  lr: 0.001
+  micro_batch: 2
+  patience: 100
+  weight_decay: 4.4e-07
+  batchsize: 32
+  grad_clip: 0.65
+  max_epochs: 100
+  device: cuda
+
+loss:
+  loss: primal+objgap+constraint
+  loss_weight_cons: 2.2
+  loss_weight_obj: 0.33
+  loss_weight_x: 1.0
+  losstype: l2
+  
+model:  
+  model_name: TripartiteHeteroGNN
+  TripartiteHeteroGNN:
+    in_shape: 2
+    lappe: 0
+    num_iters: 30
+    conv: gcnconv
+    conv_sequence: cov
+    dropout: 0.0
+    hidden: 180
+    num_conv_layers: 8
+    num_mlp_layers: 4
+    num_pred_layers: 3  
+    share_conv_weight: false
+    share_lin_weight: false
+    use_norm: true
+    use_res: false  
+  
+data:
+  datapath: '/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/knapsack/'
+  num_workers: 4
+
+other:
+  use_wandb: false
+  wandbproject: cg_gnn
+  ckpt: true
+  ipm_alpha: 0.76
+  ipm_restarts: 1
+  ipm_steps: 8
+  upper: 1.0
+
+
+
+
+
+
+
