@@ -47,16 +47,15 @@ class Pl_model_wrapper(pl.LightningModule):
 
 
     def compute_diffusion_loss(self,outputs, batch):
-        positive_lit_otp = [o[:o.shape[0]//2] for o in outputs["final_truth_assignment"]]
-        products = torch.cat(positive_lit_otp, dim = 0)
-        node_labels =((batch.assignment + 1)/2)
-        loss = torch.nn.functional.cross_entropy(products, node_labels.long().to(products.device))   
+        outputs = outputs.view(outputs.shape[0],-1,2)
+        val_preds = outputs[:,-1,:] #[o[:o.shape[0]//2] for o in outputs["final_truth_assignment"]]
+        node_labels = batch.gt_primals
+        loss = torch.nn.functional.cross_entropy(val_preds, node_labels.long().to(val_preds.device))   
         return loss 
 
     def training_step(self, data, batch_idx):
         t, xt = prepare_diffusion(data, self.diffusion)
-        vals, _ = self.model(data, self.num_iters, xt, t)
-        #vals, _ = self(data)
+        vals, _ = self.model(data, xt, t)
         loss = self.compute_diffusion_loss(vals, data)
         batch_size = data.batch_size
         #loss = self.get_loss(vals, data)
@@ -64,10 +63,10 @@ class Pl_model_wrapper(pl.LightningModule):
         return loss
 
     def validation_step(self, data, batch_idx):
-        vals, _ = self(data)
+        vals = self.validation_diffusion(data)
         batch_size = data.batch_size
-        cons_gap = torch.abs(self.get_constraint_violation(vals, data))[:, -1].mean()
-        obj_gap = torch.abs(self.get_obj_metric(data, vals, hard_non_negative=True))[:, -1].mean()
+        cons_gap = torch.abs(self.get_constraint_violation_valid(vals, data)).mean()
+        obj_gap = torch.abs(self.get_obj_metric_valid(data, vals, hard_non_negative=True)).mean()
         self.log('cons_gap', cons_gap, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
         self.log('obj_gap', obj_gap, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
         return obj_gap
@@ -121,22 +120,49 @@ class Pl_model_wrapper(pl.LightningModule):
         constraint_gap = torch.relu(constraint_gap)
         return constraint_gap
 
+    def get_constraint_violation_valid(self, pred, data):
+        """
+        Ax - b
+
+        :param vals:
+        :param data:
+        :return:
+        """
+        Ax = scatter(pred[data.A_col] * data.A_val[:], data.A_row, reduce='sum', dim=0)
+        constraint_gap = Ax - data.rhs[:]
+        constraint_gap = torch.relu(constraint_gap)
+        return constraint_gap
+
+    def get_obj_metric_valid(self, data, pred, hard_non_negative=False):
+        # if hard_non_negative, we need a relu to make x all non-negative
+        # just for metric usage, not for training
+        if hard_non_negative:
+            pred = torch.relu(pred)
+        c_times_x = data.obj_const * pred
+        obj_pred = scatter(c_times_x, data['vals'].batch, dim=0, reduce='sum')
+        x_gt = data.gt_primals
+        c_times_xgt = data.obj_const * x_gt
+        obj_gt = scatter(c_times_xgt, data['vals'].batch, dim=0, reduce='sum')
+        #print('obj pred vs obj get',obj_pred,obj_gt)
+        return  (obj_pred - obj_gt) / (obj_gt + 1e-6)
+
     def get_obj_metric(self, data, pred, hard_non_negative=False):
         # if hard_non_negative, we need a relu to make x all non-negative
         # just for metric usage, not for training
-        pred = pred[:, -self.ipm_steps:]
+        pred = pred[:, -self.ipm_steps]
         if hard_non_negative:
             pred = torch.relu(pred)
         c_times_x = data.obj_const[:, None] * pred
-        obj_pred = scatter(c_times_x, data['vals'].batch, dim=0, reduce='sum')
-        x_gt = data.gt_primals[:, -self.ipm_steps:]
-        c_times_xgt = data.obj_const[:, None] * x_gt
+        obj_pred = scatter(c_times_x, data['vals'].batch, dim=0, reduce='sum')[:,-1]
+        x_gt = data.gt_primals
+        c_times_xgt = data.obj_const * x_gt
         obj_gt = scatter(c_times_xgt, data['vals'].batch, dim=0, reduce='sum')
-        return (obj_pred - obj_gt) / obj_gt
+        return (obj_pred - obj_gt) / (obj_gt + 1e-6)
 
     def configure_optimizers(self):
 
         optimizer = torch.optim.Adam(self.parameters(), lr=self.lr, weight_decay=self.weight_decay)
+        return optimizer
         scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, mode='min', factor=0.5, patience=50, min_lr=1.e-5)
         return {
             "optimizer": optimizer,
@@ -150,17 +176,15 @@ class Pl_model_wrapper(pl.LightningModule):
     def categorical_denoise_step(self, xt, t, device, batch, target_t=None):
       with torch.no_grad():
         t = torch.from_numpy(t).view(1)
-        x0_pred = self.model(
+        x0_pred, _ = self.model(
             batch,
-            self.num_iters,
             xt.float(),
             t.float(),
         )
         xt = xt.to(device)
         t = t.to(device)
-        x0_pred = x0_pred["final_truth_assignment"][0]
-        x0_pred = x0_pred[:x0_pred.shape[0]//2, :]
-        x0_pred_prob = x0_pred.reshape((1, xt.shape[0], -1, 2)).softmax(dim=-1)
+        x0_pred = x0_pred.reshape((1, xt.shape[0], -1, 2))[:,:,-1,:]
+        x0_pred_prob = x0_pred.softmax(dim=-1)
         xt = self.categorical_posterior(target_t, t, x0_pred_prob, xt)
         return xt
     
@@ -215,53 +239,33 @@ class Pl_model_wrapper(pl.LightningModule):
    
     def validation_diffusion(self, batch):
         stacked_predict_labels = []
-        device = batch.x_l.device
+        device = batch.gt_primals.device
         batch_size = 1
         steps = 50
         num_solutions = 1
       
-        for _ in range(num_solutions):
-          node_labels = (batch.assignment.cpu() + 1)/2
-          xt = torch.randn_like(node_labels.float())
-          xt = (xt > 0).long()
-          xt = xt.reshape(-1)
- 
-          time_schedule = InferenceSchedule(inference_schedule="cosine",
-                                          T=self.diffusion.T, inference_T=steps)
-          for i in range(steps):
+        #for _ in range(num_solutions):
+        node_labels = batch.gt_primals.cpu()
+        xt = torch.randn_like(node_labels.float())
+        xt = (xt > 0).long()
+        xt = xt.reshape(-1)
+
+        time_schedule = InferenceSchedule(inference_schedule="cosine",
+                                        T=self.diffusion.T, inference_T=steps)
+        for i in range(steps):
             t1, t2 = time_schedule(i)
             t1 = np.array([t1 for _ in range(batch_size)]).astype(int)
             t2 = np.array([t2 for _ in range(batch_size)]).astype(int)
- 
+
             xt = self.categorical_denoise_step(xt, t1, device, batch, target_t=t2)
-            xt = xt.squeeze(2).squeeze(0)
+            xt = xt.squeeze(0)
+
+        predict_labels = xt + 1e-6
+        stacked_predict_labels.append(predict_labels)        
+
+        infered_assignment = torch.round(stacked_predict_labels[-1])
+        assert not torch.any((infered_assignment !=0)&(infered_assignment !=1))
+        #infered_assignment = infered_assignment * 2 - 1
  
-          predict_labels = xt.float().cpu().detach().numpy() + 1e-6
-          stacked_predict_labels.append(predict_labels)        
  
-          infered_assignment = np.round(stacked_predict_labels[-1])
-          assert not np.any((infered_assignment !=0)&(infered_assignment !=1))
-          infered_assignment = infered_assignment * 2 - 1
- 
-          result_literals = []
-          for ix, assignment in enumerate(list(infered_assignment)):
-              result_literals.append(int((ix+1) * assignment))
-          
-          sat_num = 0
-          for c in batch.clauses[0]:
-              for lit in c:
-                  if lit in result_literals:
-                      sat_num +=1
-                      break
-          
-          gap = len(batch.clauses[0])-sat_num
-          if gap == 0:
-             acc = 1
-          else:
-             acc = 0
- 
-          
-          self.log('val_avg_gap', gap, prog_bar=True, logger=True)
-          self.log('val_accuracy', acc, prog_bar=True, logger=True)
- 
-        return 1
+        return infered_assignment

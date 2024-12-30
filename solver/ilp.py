@@ -14,7 +14,7 @@ def solve_ilp(A, b, c):
     num_variables = len(c)
     
     # Create the model
-    prob = pulp.LpProblem("ILP", pulp.LpMaximize)
+    prob = pulp.LpProblem("ILP", pulp.LpMinimize)
     
     # Create binary variables
     x = pulp.LpVariable.dicts("x", range(num_variables), cat='Binary')

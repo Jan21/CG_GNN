@@ -5,6 +5,28 @@ from models.gcnconv import GCNConv
 from models.utils import MLP
 from models.hetero_conv import HeteroConv
 
+import math
+
+class ScalarEmbeddingSine1D(torch.nn.Module):
+  def __init__(self, num_pos_feats=64, temperature=10000, normalize=False, scale=None):
+    super().__init__()
+    self.num_pos_feats = num_pos_feats
+    self.temperature = temperature
+    self.normalize = normalize
+    if scale is not None and normalize is False:
+      raise ValueError("normalize should be True if scale is passed")
+    if scale is None:
+      scale = 2 * math.pi
+    self.scale = scale
+ 
+  def forward(self, x):
+    x_embed = x
+    dim_t = torch.arange(self.num_pos_feats, dtype=torch.float32, device=x.device)
+    dim_t = self.temperature ** (2 * torch.div(dim_t, 2, rounding_mode='trunc') / self.num_pos_feats)
+ 
+    pos_x = x_embed[:, None] / dim_t
+    pos_x = torch.stack((pos_x[:, 0::2].sin(), pos_x[:, 1::2].cos()), dim=2).flatten(1)
+    return pos_x
 
 def strseq2rank(conv_sequence):
     if conv_sequence == 'parallel':
@@ -141,19 +163,52 @@ class TripartiteHeteroGNN(torch.nn.Module):
             self.pred_vals = torch.nn.ModuleList()
             self.pred_cons = torch.nn.ModuleList()
             for layer in range(num_conv_layers):
-                self.pred_vals.append(MLP([2 * hid_dim] + [hid_dim] * (num_pred_layers - 1) + [1]))
-                self.pred_cons.append(MLP([2 * hid_dim] + [hid_dim] * (num_pred_layers - 1) + [1]))
+                self.pred_vals.append(MLP([2 * hid_dim] + [hid_dim] * (num_pred_layers - 1) + [2]))
+                self.pred_cons.append(MLP([2 * hid_dim] + [hid_dim] * (num_pred_layers - 1) + [2]))
 
-    def forward(self, data):
+        self.node_embed = torch.nn.Linear(hid_dim, in_emb_dim)
+        self.pos_embed = ScalarEmbeddingSine1D(hid_dim, normalize=False)
+ 
+        self.time_embed = torch.nn.Sequential(
+            torch.nn.Linear( hid_dim, hid_dim),
+            torch.nn.ReLU(),
+            torch.nn.Linear(hid_dim, in_emb_dim ),
+        )
+    def timestep_embedding(self,timesteps, dim, max_period=10000):
+        """
+        Create sinusoidal timestep embeddings.
+    
+        :param timesteps: a 1-D Tensor of N indices, one per batch element.
+                        These may be fractional.
+        :param dim: the dimension of the output.
+        :param max_period: controls the minimum frequency of the embeddings.
+        :return: an [N x dim] Tensor of positional embeddings.
+        """
+        half = dim // 2
+        freqs = torch.exp(
+            -math.log(max_period) * torch.arange(start=0, end=half, dtype=torch.float32) / half
+        ).to(device=timesteps.device)
+        args = timesteps[:, None].float() * freqs[None]
+        embedding = torch.cat([torch.cos(args), torch.sin(args)], dim=-1)
+        if dim % 2:
+            embedding = torch.cat([embedding, torch.zeros_like(embedding[:, :1])], dim=-1)
+        return embedding
+    def cat_negative_lits(self, xt, num_vars):
+        xt_list = torch.split(xt, num_vars.cpu().numpy().tolist())
+        xt_list_with_neg_lits = []
+        for x in xt_list:
+            xt_list_with_neg_lits.append(torch.cat([x, -x]))
+ 
+        return torch.cat(xt_list_with_neg_lits)    
+    
+    def forward(self, data,xt,t):
         x_dict, edge_index_dict, edge_attr_dict = data.x_dict, data.edge_index_dict, data.edge_attr_dict
         for k in ['cons', 'vals', 'obj']:
             x_emb = self.encoder[k](x_dict[k])
-            if self.pe_encoder is not None and hasattr(data[k], 'laplacian_eigenvector_pe'):
-                pe_emb = 0.5 * (self.pe_encoder[k](data[k].laplacian_eigenvector_pe) +
-                                self.pe_encoder[k](-data[k].laplacian_eigenvector_pe))
-                x_emb = torch.cat([x_emb, pe_emb], dim=1)
             x_dict[k] = x_emb
-
+        x_l = self.node_embed(self.pos_embed(xt.to(x_dict['vals'].device)))
+        x_dict['vals'] = x_l / torch.norm(x_l, dim=1, keepdim=True)
+        time_emb = self.time_embed(self.timestep_embedding(t.to(x_l.device), x_l.shape[1]//2))
         hiddens = []
         for i in range(self.num_layers):
             if self.share_conv_weight:
@@ -168,6 +223,7 @@ class TripartiteHeteroGNN(torch.nn.Module):
             else:
                 h = {k: F.relu(h2[k]) for k in keys}
             h = {k: F.dropout(h[k], p=self.dropout, training=self.training) for k in keys}
+            h['vals'] = h['vals'] + time_emb
             x_dict = h
 
         cons, vals = zip(*hiddens)

@@ -197,6 +197,10 @@ class ILPDataset(InMemoryDataset):
         data_list = []
         for i in range(num_instance_pkg):
             # load instance
+            batch_path = osp.join(self.processed_dir, f'batch{i}.pt')
+            if osp.exists(batch_path):
+                print(f"batch {i} already exists")
+                continue
             print(f"processing {i}th package, {num_instance_pkg} in total")
             with gzip.open(os.path.join(self.raw_dir, f"instance_{i}.pkl.gz"), "rb") as file:
                 ip_pkgs = pickle.load(file)
@@ -256,6 +260,7 @@ class ILPDataset(InMemoryDataset):
                                                                 torch.arange(A.shape[0])]),
                                     'edge_attr': b[:, None]},
                     gt_primals=gt_primals,
+                    num_variables=len(gt_primals),
                     # gt_duals=gt_duals,
                     # gt_slacks=gt_slacks,
                     obj_value=torch.tensor(obj_val),
@@ -266,7 +271,7 @@ class ILPDataset(InMemoryDataset):
                     A_val=torch.tensor(val),
                     A_num_row=A.shape[0],
                     A_num_col=A.shape[1],
-                    A_nnz=1,
+                    A_nnz=len(val),
                     A_tilde_mask=tilde_mask,
                     rhs=b)
 

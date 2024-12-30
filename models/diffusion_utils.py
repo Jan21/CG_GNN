@@ -72,16 +72,16 @@ def prepare_diffusion(batch, diffusion):
     point_indicator = (batch.num_variables).unsqueeze(1)
     t = np.random.randint(1, diffusion.T + 1, point_indicator.shape[0]).astype(int)
 
-    node_labels = (batch.assignment.cpu() + 1)/2
+    node_labels = (batch.gt_primals.cpu() + 1)/2
     node_labels_onehot = torch.nn.functional.one_hot(node_labels.long(), num_classes=2).float()
     node_labels_onehot = node_labels_onehot.unsqueeze(1).unsqueeze(1)
 
     t = torch.from_numpy(t).long()
     t1 = t.repeat_interleave(point_indicator.reshape(-1).cpu(), dim=0).numpy()
-    t2 = t.repeat_interleave(2*point_indicator.reshape(-1).cpu(), dim=0).numpy()
+    t2 = t.repeat_interleave(point_indicator.reshape(-1).cpu(), dim=0).numpy()
 
     xt = diffusion.sample(node_labels_onehot, t1)
-    xt = xt * 2 - 1
+    #xt = xt * 2 - 1
     xt = xt * (1.0 + 0.05 * torch.rand_like(xt))
 
     t = torch.from_numpy(t2).float().reshape(-1)
