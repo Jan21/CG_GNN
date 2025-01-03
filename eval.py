@@ -37,6 +37,7 @@ def main(cfg: DictConfig):
                                          f'{"_upper_" + str(cfg.other.upper) if cfg.other.upper is not None else ""}',
                         upper_bound=cfg.other.upper,
                         rand_starts=cfg.other.ipm_restarts)
+
     else:
         ILP = False
         model_name = 'TripartiteHeteroGNNClean'
@@ -52,27 +53,20 @@ def main(cfg: DictConfig):
 
     data = Datamodule(dataset, cfg.train.batchsize,cfg.data.num_workers,cfg.data.ILP)
 
-    model = Pl_model_wrapper(model_name,cfg,cfg.train.device,ILP)
-
-    if os.path.exists(cfg.train.ckpt) and cfg.train.resume:
-        print(f"Loading checkpoint from {cfg.train.ckpt}")
-        model = model.load_from_checkpoint(cfg.train.ckpt, 
-                                         model_name=model_name,
-                                         cfg=cfg,
-                                         device=cfg.train.device,
-                                         ILP=ILP)
+    model = Pl_model_wrapper.load_from_checkpoint(cfg.eval.ckpt, 
+                                        model_name=model_name,
+                                        cfg=cfg,
+                                        device=cfg.train.device,
+                                        ILP=ILP)
     
-    logger = WandbLogger(project="CG_GNN", name=f"{model_name}")
+    # Initialize trainer and run validation
+    trainer = pl.Trainer(
+        accelerator='gpu',
+        devices=1
+    )
     
-    trainer = pl.Trainer(max_epochs=cfg.train.max_epochs, 
-                         logger=logger,
-                         accelerator="gpu", devices=1,
-                         gradient_clip_val=cfg.train.grad_clip)
+    results = trainer.validate(model, data)
+    print(f"Validation results: {results}")
     
-    trainer.fit(model, data)
-    trainer.save_checkpoint(cfg.other.ckpt)
-
-          
 if __name__ == '__main__':
     main()
-     

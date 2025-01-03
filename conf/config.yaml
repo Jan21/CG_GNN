@@ -1,13 +1,14 @@
 train:
-  lr: 0.0008
+  lr: 0.0005
   micro_batch: 4
   patience: 100
   weight_decay: 4.4e-07
-  batchsize: 48
+  batchsize: 64
   grad_clip: 0.65
-  max_epochs: 100
+  max_epochs: 30
   device: cuda
-
+  ckpt: '/home/jan/projects/CIIRC/column generation/CG_GNN/outputs/2024-12-31/20-29-15/trained_model.ckpt'
+  resume: false
 loss:
   loss: primal+objgap+constraint
   loss_weight_cons: 2.0
@@ -16,8 +17,7 @@ loss:
   losstype: l2
   
 model:  
-  model_name: TripartiteHeteroGNN
-  TripartiteHeteroGNN:
+  params:
     in_shape: 2
     lappe: 0
     num_iters: 20
@@ -34,17 +34,20 @@ model:
     use_res: false  
   
 data:
-  datapath: '/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/cg_gc' #'/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/knapsack/'
+  task: 'rmp' # rmp, sub
+  datapath: '/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/cg_gc/${data.task}' #'/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/knapsack/'
   num_workers: 4
 
 other:
   use_wandb: false
   wandbproject: cg_gnn
-  ckpt: 'trained_model.ckpt'
   ipm_alpha: 0.76
   ipm_restarts: 1
   ipm_steps: 8
   upper: 1.0
+eval:
+  ckpt: '/home/jan/projects/CIIRC/column generation/CG_GNN/temp/checkpoints/rmp/trained_model.ckpt'
+  #ckpt: '/home/jan/projects/CIIRC/column generation/CG_GNN/temp/checkpoints/sub/trained_model.ckpt'
 
 
 

@@ -31,7 +31,8 @@ def linprog(c, A_ub=None, b_ub=None, A_eq=None, b_eq=None,
     (lp, c0, x, undo, complete, status, message) = _presolve(lp, rr,
                                                              rr_method,
                                                              tol)
-    assert not complete
+    if complete:
+        return None
 
     C, b_scale = 1, 1  # for trivial unscaling if autoscale is not used
     postsolve_args = (lp_o._replace(bounds=lp.bounds), undo, C, b_scale)

@@ -11,13 +11,14 @@ class Pl_model_wrapper(pl.LightningModule):
     def __init__(self, 
                  model_name, 
                  cfg,
-                device
+                device,
+                ILP
                 ):
         super(Pl_model_wrapper, self).__init__()
         self.save_hyperparameters()
         self.model_name = model_name
         model_class = models_dict[model_name]
-        self.model = model_class(**cfg.model[model_name])
+        self.model = model_class(**cfg.model.params)
         self.diffusion = CategoricalDiffusion(T=1000, schedule='linear')
         self.lr = cfg.train.lr
         self.weight_decay = cfg.train.weight_decay
@@ -31,7 +32,7 @@ class Pl_model_wrapper(pl.LightningModule):
         self.best_val_objgap = 100.
         self.best_val_consgap = 100.
         self.patience = 0
-
+        self.ILP = ILP
         self.loss_target = cfg.loss.loss.split('+')
         self.loss_weight = {'primal': cfg.loss.loss_weight_x,
                                        'objgap': cfg.loss.loss_weight_obj,
@@ -54,19 +55,27 @@ class Pl_model_wrapper(pl.LightningModule):
         return loss 
 
     def training_step(self, data, batch_idx):
-        t, xt = prepare_diffusion(data, self.diffusion)
-        vals, _ = self.model(data, xt, t)
-        loss = self.compute_diffusion_loss(vals, data)
         batch_size = data.batch_size
-        #loss = self.get_loss(vals, data)
+        if self.ILP:
+            t, xt = prepare_diffusion(data, self.diffusion)
+            vals, _ = self.model(data, xt, t)
+            loss = self.compute_diffusion_loss(vals, data)
+        else:   
+            vals, _ = self(data)
+            loss = self.get_loss(vals, data)
         self.log('train_loss',loss,prog_bar=True, batch_size=batch_size, logger=True)
         return loss
 
     def validation_step(self, data, batch_idx):
-        vals = self.validation_diffusion(data)
         batch_size = data.batch_size
-        cons_gap = torch.abs(self.get_constraint_violation_valid(vals, data)).mean()
-        obj_gap = torch.abs(self.get_obj_metric_valid(data, vals, hard_non_negative=True)).mean()
+        if self.ILP:
+            vals = self.validation_diffusion(data)
+            cons_gap = torch.abs(self.get_constraint_violation_valid(vals, data)).mean()
+            obj_gap = torch.abs(self.get_obj_metric_valid(data, vals, hard_non_negative=True)).mean()
+        else:
+            vals, _ = self(data)
+            cons_gap = torch.abs(self.get_constraint_violation(vals, data))[:, -1].mean()
+            obj_gap = torch.abs(self.get_obj_metric(data, vals, hard_non_negative=True))[:, -1].mean()  
         self.log('cons_gap', cons_gap, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
         self.log('obj_gap', obj_gap, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
         return obj_gap
@@ -146,7 +155,7 @@ class Pl_model_wrapper(pl.LightningModule):
         #print('obj pred vs obj get',obj_pred,obj_gt)
         return  (obj_pred - obj_gt) / (obj_gt + 1e-6)
 
-    def get_obj_metric(self, data, pred, hard_non_negative=False):
+    def get_obj_metric_ILP(self, data, pred, hard_non_negative=False):
         # if hard_non_negative, we need a relu to make x all non-negative
         # just for metric usage, not for training
         pred = pred[:, -self.ipm_steps]
@@ -156,6 +165,17 @@ class Pl_model_wrapper(pl.LightningModule):
         obj_pred = scatter(c_times_x, data['vals'].batch, dim=0, reduce='sum')[:,-1]
         x_gt = data.gt_primals
         c_times_xgt = data.obj_const * x_gt
+        obj_gt = scatter(c_times_xgt, data['vals'].batch, dim=0, reduce='sum')
+        return (obj_pred - obj_gt) / (obj_gt + 1e-6)
+    
+    def get_obj_metric(self, data, pred, hard_non_negative=False):
+        pred = pred[:, -self.ipm_steps:]
+        if hard_non_negative:
+            pred = torch.relu(pred)
+        c_times_x = data.obj_const[:, None] * pred
+        obj_pred = scatter(c_times_x, data['vals'].batch, dim=0, reduce='sum')
+        x_gt = data.gt_primals[:, -self.ipm_steps:]
+        c_times_xgt = data.obj_const[:, None] * x_gt
         obj_gt = scatter(c_times_xgt, data['vals'].batch, dim=0, reduce='sum')
         return (obj_pred - obj_gt) / (obj_gt + 1e-6)
 
