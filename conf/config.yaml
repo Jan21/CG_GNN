@@ -1,11 +1,11 @@
 train:
-  lr: 0.0005
+  lr: 0.001
   micro_batch: 4
   patience: 100
   weight_decay: 4.4e-07
   batchsize: 64
   grad_clip: 0.65
-  max_epochs: 30
+  max_epochs: 200
   device: cuda
   ckpt: '/home/jan/projects/CIIRC/column generation/CG_GNN/outputs/2024-12-31/20-29-15/trained_model.ckpt'
   resume: false
@@ -34,8 +34,8 @@ model:
     use_res: false  
   
 data:
-  task: 'rmp' # rmp, sub
-  datapath: '/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/cg_gc/${data.task}' #'/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/knapsack/'
+  task: 'sub' # rmp, sub
+  datapath: '/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/select_columns/${data.task}' #'/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/knapsack/'
   num_workers: 4
 
 other:

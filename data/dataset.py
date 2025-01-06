@@ -194,7 +194,7 @@ class ILPDataset(InMemoryDataset):
     def processed_file_names(self) -> List[str]:
         return ['data.pt']
 
-    def prepare_example(self,A,b,c):
+    def prepare_example(self,A,b,c,labels):
                 
         sp_a = SparseTensor.from_dense(A, has_value=True)
 
@@ -215,8 +215,8 @@ class ILPDataset(InMemoryDataset):
         b_ub = None
 
         bounds = (0, self.upper_bound)
-
-        sol,obj_val = solve_ilp(c=c.numpy(), A=A_eq, b=b_eq)
+        sol,obj_val = np.array(labels),0
+        #sol,obj_val = solve_ilp(c=c.numpy(), A=A_eq, b=b_eq)
 
         gt_primals = torch.from_numpy(sol).to(torch.float)
         # gt_duals = torch.from_numpy(l).to(torch.float)
@@ -286,8 +286,8 @@ class ILPDataset(InMemoryDataset):
                 ip_pkgs = pickle.load(file)
 
             for ip_idx in tqdm(range(len(ip_pkgs))):
-                (A, b, c) = ip_pkgs[ip_idx]
-                data = self.prepare_example(A, b, c)
+                (A, b, c, labels) = ip_pkgs[ip_idx]
+                data = self.prepare_example(A, b, c,labels)
                 data_list.append(data)
 
             torch.save(Batch.from_data_list(data_list), osp.join(self.processed_dir, f'batch{i}.pt'))

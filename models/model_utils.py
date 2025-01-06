@@ -65,20 +65,45 @@ class Pl_model_wrapper(pl.LightningModule):
             loss = self.get_loss(vals, data)
         self.log('train_loss',loss,prog_bar=True, batch_size=batch_size, logger=True)
         return loss
+    def get_accuracy(self, vals, labels):
+        # Compare each row for equality and count matches
+        
+        total = vals.shape[0]
+        return correct / total
 
     def validation_step(self, data, batch_idx):
         batch_size = data.batch_size
         if self.ILP:
             vals = self.validation_diffusion(data)
-            cons_gap = torch.abs(self.get_constraint_violation_valid(vals, data)).mean()
-            obj_gap = torch.abs(self.get_obj_metric_valid(data, vals, hard_non_negative=True)).mean()
+            correct = (vals == data.gt_primals).all().float()
+            row, col, val = data.A_row, data.A_col, data.A_val
+            # Reconstruct dense matrix A from sparse representation
+            A = torch.zeros((data.A_num_row, data.A_num_col), device=vals.device)
+            A[row, col] = val
+            valid = ((A @ vals - data.rhs) == 0).all()
+            num_sol = vals.sum()
+            both = (vals * data.gt_primals).sum()
+            gt  = data.gt_primals.sum()
+            valid_and_minimal = (valid & (num_sol == gt)).float()
+            one_off = (valid & (torch.abs(num_sol - gt) <= 1)).float()
+            two_off = (valid & (torch.abs(num_sol - gt) <= 2)).float()
+            three_off = (valid & (torch.abs(num_sol - gt) <= 3)).float()
+
+
+            #cons_gap = torch.abs(self.get_constraint_violation_valid(vals, data)).mean()
+            #obj_gap = torch.abs(self.get_obj_metric_valid(data, vals, hard_non_negative=True)).mean()
         else:
             vals, _ = self(data)
             cons_gap = torch.abs(self.get_constraint_violation(vals, data))[:, -1].mean()
             obj_gap = torch.abs(self.get_obj_metric(data, vals, hard_non_negative=True))[:, -1].mean()  
-        self.log('cons_gap', cons_gap, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
-        self.log('obj_gap', obj_gap, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
-        return obj_gap
+        self.log('accuracy', correct, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
+        self.log('one_off', one_off, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
+        self.log('two_off', two_off, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
+        self.log('three_off', three_off, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
+        self.log('valid', valid, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
+        self.log('valid_and_minimal', valid_and_minimal, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
+        #self.log('obj_gap', obj_gap, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
+        return correct
 
     def test_step(self, data, batch_idx):
         vals, _ = self(data)

@@ -29,7 +29,7 @@ def main(cfg: DictConfig):
 
     if cfg.data.task == 'sub':
         ILP = True
-        model_name = 'TripartiteHeteroGNN'
+        model_name = 'ColumnHeteroGNN'
         dataset = ILPDataset(cfg.data.datapath,
                         extra_path=f'{cfg.other.ipm_restarts}restarts_'
                                          f'{cfg.model.params.lappe}lap_'
@@ -50,7 +50,7 @@ def main(cfg: DictConfig):
                         pre_transform=Compose([HeteroAddLaplacianEigenvectorPE(k=cfg.model.params.lappe),
                                                      SubSample(cfg.other.ipm_steps)]))
 
-    data = Datamodule(dataset, cfg.train.batchsize,cfg.data.num_workers,cfg.data.ILP)
+    data = Datamodule(dataset, cfg.train.batchsize,cfg.data.num_workers,ILP)
 
     model = Pl_model_wrapper(model_name,cfg,cfg.train.device,ILP)
 
@@ -66,7 +66,7 @@ def main(cfg: DictConfig):
     
     trainer = pl.Trainer(max_epochs=cfg.train.max_epochs, 
                          logger=logger,
-                         accelerator="gpu", devices=1,
+                         accelerator='gpu', 
                          gradient_clip_val=cfg.train.grad_clip)
     
     trainer.fit(model, data)
