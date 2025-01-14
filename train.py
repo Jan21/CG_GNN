@@ -64,6 +64,7 @@ def main(cfg: DictConfig):
     
     logger = WandbLogger(project="CG_GNN", name=f"{model_name}")
     
+    
     trainer = pl.Trainer(max_epochs=cfg.train.max_epochs, 
                          logger=logger,
                          accelerator='gpu', 

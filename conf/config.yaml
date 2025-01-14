@@ -3,7 +3,7 @@ train:
   micro_batch: 4
   patience: 100
   weight_decay: 4.4e-07
-  batchsize: 64
+  batchsize: 96
   grad_clip: 0.65
   max_epochs: 200
   device: cuda
@@ -22,7 +22,7 @@ model:
     lappe: 0
     num_iters: 20
     conv: gcnconv
-    conv_sequence: cov
+    conv_sequence: n-o-cl-co-cv
     dropout: 0.0
     hidden: 180
     num_conv_layers: 8
@@ -35,7 +35,7 @@ model:
   
 data:
   task: 'sub' # rmp, sub
-  datapath: '/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/select_columns/${data.task}' #'/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/knapsack/'
+  datapath: '/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/generate_column_noise_level_5/${data.task}' #'/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/knapsack/'
   num_workers: 4
 
 other:

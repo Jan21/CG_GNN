@@ -57,10 +57,26 @@ def collate_fn_ip(graphs: List[Data]):
 
 def collate_fn_ilp(graphs: List[Data]):
     new_batch = Batch.from_data_list(graphs)
-    row_bias = torch.hstack([new_batch.A_num_row.new_zeros(1), new_batch.A_num_row[:-1]]).cumsum(dim=0)
-    row_bias = torch.repeat_interleave(row_bias, new_batch.A_nnz)
-    new_batch.A_row += row_bias
-    col_bias = torch.hstack([new_batch.A_num_col.new_zeros(1), new_batch.A_num_col[:-1]]).cumsum(dim=0)
-    col_bias = torch.repeat_interleave(col_bias, new_batch.A_nnz)
-    new_batch.A_col += col_bias
+
+    row_bias1 = torch.hstack([new_batch.column__to__cliques_num_row.new_zeros(1), new_batch.column__to__cliques_num_row[:-1]]).cumsum(dim=0)
+    row_bias1 = torch.repeat_interleave(row_bias1, new_batch.column__to__cliques_nnz)
+    new_batch.column__to__cliques_row += row_bias1
+    col_bias1 = torch.hstack([new_batch.column__to__cliques_num_col.new_zeros(1), new_batch.column__to__cliques_num_col[:-1]]).cumsum(dim=0)
+    col_bias1 = torch.repeat_interleave(col_bias1, new_batch.column__to__cliques_nnz)
+    new_batch.column__to__cliques_col += col_bias1
+
+    row_bias2 = torch.hstack([new_batch.cvars__to__nodes_num_row.new_zeros(1), new_batch.cvars__to__nodes_num_row[:-1]]).cumsum(dim=0)
+    row_bias2 = torch.repeat_interleave(row_bias2, new_batch.cvars__to__nodes_nnz)
+    new_batch.cvars__to__nodes_row += row_bias2
+    col_bias2 = torch.hstack([new_batch.cvars__to__nodes_num_col.new_zeros(1), new_batch.cvars__to__nodes_num_col[:-1]]).cumsum(dim=0)
+    col_bias2 = torch.repeat_interleave(col_bias2, new_batch.cvars__to__nodes_nnz)
+    new_batch.cvars__to__nodes_col += col_bias2
+
+    row_bias3 = torch.hstack([new_batch.column__to__nodes_num_row.new_zeros(1), new_batch.column__to__nodes_num_row[:-1]]).cumsum(dim=0)
+    row_bias3 = torch.repeat_interleave(row_bias3, new_batch.column__to__nodes_nnz)
+    new_batch.column__to__nodes_row += row_bias3
+    col_bias3 = torch.hstack([new_batch.column__to__nodes_num_col.new_zeros(1), new_batch.column__to__nodes_num_col[:-1]]).cumsum(dim=0)
+    col_bias3 = torch.repeat_interleave(col_bias3, new_batch.column__to__nodes_nnz)
+    new_batch.column__to__nodes_col += col_bias3
+
     return new_batch

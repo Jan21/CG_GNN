@@ -46,20 +46,23 @@ class Pl_model_wrapper(pl.LightningModule):
     def forward(self, batch):
         return self.model(batch)
 
-
-    def compute_diffusion_loss(self,outputs, batch):
-        outputs = outputs.view(outputs.shape[0],-1,2)
-        val_preds = outputs[:,-1,:] #[o[:o.shape[0]//2] for o in outputs["final_truth_assignment"]]
-        node_labels = batch.gt_primals
-        loss = torch.nn.functional.cross_entropy(val_preds, node_labels.long().to(val_preds.device))   
+    def compute_diffusion_loss(self,pred_column,pred_cvars, batch):
+        #pred_column = pred_column.view(pred_column.shape[0],-1,2)
+        #pred_cvars = pred_cvars.view(pred_cvars.shape[0],-1,2)
+        #pred_column = pred_column[:,-1,:] #[o[:o.shape[0]//2] for o in outputs["final_truth_assignment"]]
+        #pred_cvars = pred_cvars[:,-1,:] #[o[:o.shape[0]//2] for o in outputs["final_truth_assignment"]]
+        column_labels = batch.column_labels
+        cvars_labels = batch.cvars_labels
+        loss = torch.nn.functional.cross_entropy(pred_column, column_labels.long().to(pred_column.device)) \
+       # + torch.nn.functional.cross_entropy(pred_cvars, cvars_labels.long().to(pred_cvars.device))   
         return loss 
 
     def training_step(self, data, batch_idx):
         batch_size = data.batch_size
         if self.ILP:
-            t, xt = prepare_diffusion(data, self.diffusion)
-            vals, _ = self.model(data, xt, t)
-            loss = self.compute_diffusion_loss(vals, data)
+            t_cvars, t_column, xt_cvars, xt_column = prepare_diffusion(data, self.diffusion)
+            pred_column,pred_cvars = self.model(data,xt_column, xt_cvars, t_column, t_cvars)
+            loss = self.compute_diffusion_loss(pred_column,pred_cvars, data)
         else:   
             vals, _ = self(data)
             loss = self.get_loss(vals, data)
@@ -74,20 +77,21 @@ class Pl_model_wrapper(pl.LightningModule):
     def validation_step(self, data, batch_idx):
         batch_size = data.batch_size
         if self.ILP:
-            vals = self.validation_diffusion(data)
-            correct = (vals == data.gt_primals).all().float()
-            row, col, val = data.A_row, data.A_col, data.A_val
+            column,cvars = self.validation_diffusion(data)
+            correct_column = (column == data.column_labels).all().float()
+            correct_cvars = (cvars == data.cvars_labels).all().float()
+            #row, col, val = data.A1_row, data.A_col, data.A_val
             # Reconstruct dense matrix A from sparse representation
-            A = torch.zeros((data.A_num_row, data.A_num_col), device=vals.device)
-            A[row, col] = val
-            valid = ((A @ vals - data.rhs) == 0).all()
-            num_sol = vals.sum()
-            both = (vals * data.gt_primals).sum()
-            gt  = data.gt_primals.sum()
-            valid_and_minimal = (valid & (num_sol == gt)).float()
-            one_off = (valid & (torch.abs(num_sol - gt) <= 1)).float()
-            two_off = (valid & (torch.abs(num_sol - gt) <= 2)).float()
-            three_off = (valid & (torch.abs(num_sol - gt) <= 3)).float()
+            #A = torch.zeros((data.A_num_row, data.A_num_col), device=vals.device)
+            #A[row, col] = val
+            #valid = ((A @ vals - data.rhs) == 0).all()
+            #num_sol = vals.sum()
+            #both = (vals * data.cons1_vals).sum()
+            #gt  = data.cons1_vals.sum()
+            #valid_and_minimal = ((num_sol == gt)).float()
+            #one_off = ((torch.abs(num_sol - gt) <= 1)).float()
+            #two_off = ((torch.abs(num_sol - gt) <= 2)).float()
+            #three_off = ((torch.abs(num_sol - gt) <= 3)).float()
 
 
             #cons_gap = torch.abs(self.get_constraint_violation_valid(vals, data)).mean()
@@ -96,14 +100,14 @@ class Pl_model_wrapper(pl.LightningModule):
             vals, _ = self(data)
             cons_gap = torch.abs(self.get_constraint_violation(vals, data))[:, -1].mean()
             obj_gap = torch.abs(self.get_obj_metric(data, vals, hard_non_negative=True))[:, -1].mean()  
-        self.log('accuracy', correct, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
-        self.log('one_off', one_off, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
-        self.log('two_off', two_off, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
-        self.log('three_off', three_off, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
-        self.log('valid', valid, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
-        self.log('valid_and_minimal', valid_and_minimal, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
+        self.log('accuracy_column', correct_column, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
+        self.log('accuracy_cvars', correct_cvars, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
+        #self.log('one_off', one_off, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
+        #self.log('two_off', two_off, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
+        #self.log('three_off', three_off, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
+        #self.log('valid_and_minimal', valid_and_minimal, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
         #self.log('obj_gap', obj_gap, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
-        return correct
+        return correct_column, correct_cvars
 
     def test_step(self, data, batch_idx):
         vals, _ = self(data)
@@ -218,20 +222,26 @@ class Pl_model_wrapper(pl.LightningModule):
         }
     
 
-    def categorical_denoise_step(self, xt, t, device, batch, target_t=None):
+    def categorical_denoise_step(self, xt_column, xt_cvars, t, device, batch, target_t=None):
       with torch.no_grad():
         t = torch.from_numpy(t).view(1)
-        x0_pred, _ = self.model(
+        x0_pred_column, x0_pred_cvars = self.model(
             batch,
-            xt.float(),
+            xt_column.float(),
+            xt_cvars.float(),
+            t.float(),
             t.float(),
         )
-        xt = xt.to(device)
+        xt_column = xt_column.to(device)
+        xt_cvars = xt_cvars.to(device)
         t = t.to(device)
-        x0_pred = x0_pred.reshape((1, xt.shape[0], -1, 2))[:,:,-1,:]
-        x0_pred_prob = x0_pred.softmax(dim=-1)
-        xt = self.categorical_posterior(target_t, t, x0_pred_prob, xt)
-        return xt
+        x0_pred_column = x0_pred_column.reshape((1, xt_column.shape[0], -1, 2))[:,:,-1,:]
+        x0_pred_cvars = x0_pred_cvars.reshape((1, xt_cvars.shape[0], -1, 2))[:,:,-1,:]
+        x0_pred_prob_column = x0_pred_column.softmax(dim=-1)
+        x0_pred_prob_cvars = x0_pred_cvars.softmax(dim=-1)
+        xt_column = self.categorical_posterior(target_t, t, x0_pred_prob_column, xt_column)
+        xt_cvars = self.categorical_posterior(target_t, t, x0_pred_prob_cvars, xt_cvars)
+        return xt_column, xt_cvars
     
     def categorical_posterior(self, target_t, t, x0_pred_prob, xt):
       
@@ -283,17 +293,22 @@ class Pl_model_wrapper(pl.LightningModule):
       return xt
    
     def validation_diffusion(self, batch):
-        stacked_predict_labels = []
-        device = batch.gt_primals.device
+        stacked_predict_column_labels = []
+        stacked_predict_cvars_labels = []
+        device = batch.column_labels.device
         batch_size = 1
         steps = 50
         num_solutions = 1
       
         #for _ in range(num_solutions):
-        node_labels = batch.gt_primals.cpu()
-        xt = torch.randn_like(node_labels.float())
-        xt = (xt > 0).long()
-        xt = xt.reshape(-1)
+        column_labels = batch.column_labels.cpu()
+        cvars_labels = batch.cvars_labels.cpu()
+        xt_column = torch.randn_like(column_labels.float())
+        xt_cvars = torch.randn_like(cvars_labels.float())
+        xt_column = (xt_column > 0).long()
+        xt_cvars = (xt_cvars > 0).long()
+        xt_column = xt_column.reshape(-1)
+        xt_cvars = xt_cvars.reshape(-1)
 
         time_schedule = InferenceSchedule(inference_schedule="cosine",
                                         T=self.diffusion.T, inference_T=steps)
@@ -301,16 +316,19 @@ class Pl_model_wrapper(pl.LightningModule):
             t1, t2 = time_schedule(i)
             t1 = np.array([t1 for _ in range(batch_size)]).astype(int)
             t2 = np.array([t2 for _ in range(batch_size)]).astype(int)
+            xt_column,xt_cvars = self.categorical_denoise_step(xt_column,xt_cvars, t1, device, batch, target_t=t2)
+            xt_column = xt_column.squeeze(0)
+            xt_cvars = xt_cvars.squeeze(0)
 
-            xt = self.categorical_denoise_step(xt, t1, device, batch, target_t=t2)
-            xt = xt.squeeze(0)
+        predict_column_labels = xt_column + 1e-6
+        predict_cvars_labels = xt_cvars + 1e-6
+        stacked_predict_column_labels.append(predict_column_labels)        
+        stacked_predict_cvars_labels.append(predict_cvars_labels)        
 
-        predict_labels = xt + 1e-6
-        stacked_predict_labels.append(predict_labels)        
-
-        infered_assignment = torch.round(stacked_predict_labels[-1])
-        assert not torch.any((infered_assignment !=0)&(infered_assignment !=1))
+        infered_assignment_column = torch.round(stacked_predict_column_labels[-1])
+        infered_assignment_cvars = torch.round(stacked_predict_cvars_labels[-1])
+        assert not torch.any((infered_assignment_column !=0)&(infered_assignment_column !=1))
+        assert not torch.any((infered_assignment_cvars !=0)&(infered_assignment_cvars !=1))
         #infered_assignment = infered_assignment * 2 - 1
  
- 
-        return infered_assignment
+        return infered_assignment_column, infered_assignment_cvars

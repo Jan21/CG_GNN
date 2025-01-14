@@ -96,16 +96,18 @@ class HeteroConv(torch.nn.Module):
                 :meth:`~torch_geometric.nn.conv.HeteroConv.forward` via
                 :obj:`edge_attr_dict = { edge_type: edge_attr }`.
         """
+        # ranked convs is a list of ModuleDict, each ModuleDict contains convs with the same rank
         for cur_rank, cur_convs in enumerate(self.ranked_convs):
             out_dict = defaultdict(list)
+            # iterate over each edge type and its corresponding edge index
             for edge_type, edge_index in edge_index_dict.items():
                 src, rel, dst = edge_type
 
                 str_edge_type = '__'.join(edge_type)
                 if str_edge_type not in cur_convs:
                     continue
-
                 args = []
+                # args dictis edge_attr_dict
                 for value_dict in args_dict:
                     if edge_type in value_dict:
                         args.append(value_dict[edge_type])
