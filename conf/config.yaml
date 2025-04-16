@@ -34,7 +34,7 @@ model:
     use_res: false  
   
 data:
-  task: 'rmp' # rmp, sub
+  task: 'sub' # rmp, sub
   datapath: '/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/cg_gc/${data.task}' #'/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/knapsack/'
   num_workers: 4
 

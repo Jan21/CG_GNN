@@ -50,7 +50,7 @@ def main(cfg: DictConfig):
                         pre_transform=Compose([HeteroAddLaplacianEigenvectorPE(k=cfg.model.params.lappe),
                                                      SubSample(cfg.other.ipm_steps)]))
 
-    data = Datamodule(dataset, cfg.train.batchsize,cfg.data.num_workers,cfg.data.ILP)
+    data = Datamodule(dataset, cfg.train.batchsize,cfg.data.num_workers,ILP)
 
     model = Pl_model_wrapper(model_name,cfg,cfg.train.device,ILP)
 
