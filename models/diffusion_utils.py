@@ -73,7 +73,7 @@ def prepare_diffusion(batch, diffusion):
     t = np.random.randint(1, diffusion.T + 1, point_indicator.shape[0]).astype(int)
 
     node_labels = (batch.gt_primals.cpu() + 1)/2
-    node_labels_onehot = torch.nn.functional.one_hot(node_labels.long(), num_classes=2).float()
+    node_labels_onehot = torch.nn.functional.one_hot(node_labels.long(), num_classes=13).float()
     node_labels_onehot = node_labels_onehot.unsqueeze(1).unsqueeze(1)
 
     t = torch.from_numpy(t).long()

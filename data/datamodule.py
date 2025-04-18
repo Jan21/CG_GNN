@@ -15,8 +15,8 @@ class Datamodule(pl.LightningDataModule):
         self.ILP = ILP
         if ILP:
             self.collate_fn = collate_fn_ilp
-            self.val_size = 50
-            self.val_batch_size = 1
+            self.val_size = 500
+            self.val_batch_size = 64
         else:
             self.collate_fn = collate_fn_ip
             self.val_size = 500

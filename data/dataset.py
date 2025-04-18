@@ -45,7 +45,7 @@ class LPDataset(InMemoryDataset):
     def processed_file_names(self) -> List[str]:
         return ['data.pt']
 
-    def prepare_example(self,A,b,c):
+    def prepare_example(self,A,b,c,x):
                 sp_a = SparseTensor.from_dense(A, has_value=True)
 
                 row = sp_a.storage._row
@@ -77,17 +77,17 @@ class LPDataset(InMemoryDataset):
                     # sol = ipm_overleaf(c.numpy(), A_ub, b_ub, A_eq, b_eq, None, max_iter=1000, lin_solver='scipy_cg')
                     # x = np.stack(sol['xs'], axis=1)  # primal
 
-                    sol = linprog(c.numpy(),
-                                  A_ub=A_ub,
-                                  b_ub=b_ub,
-                                  A_eq=A_eq, b_eq=b_eq, bounds=bounds,
-                                  method='interior-point', callback=lambda res: res.x)
-                    if sol == None:
-                        continue
-                    x = np.stack(sol.intermediate, axis=1)
-                    assert not np.isnan(sol['fun'])
+                    # sol = linprog(c.numpy(),
+                    #               A_ub=A_ub,
+                    #               b_ub=b_ub,
+                    #               A_eq=A_eq, b_eq=b_eq, bounds=bounds,
+                    #               method='interior-point', callback=lambda res: res.x)
+                    # if sol == None:
+                    #     continue
+                    # x = np.stack(sol.intermediate, axis=1)
+                    # assert not np.isnan(sol['fun'])
 
-                    gt_primals = torch.from_numpy(x).to(torch.float)
+                    gt_primals = x.to(torch.long) #torch.from_numpy(x).to(torch.float)
                     # gt_duals = torch.from_numpy(l).to(torch.float)
                     # gt_slacks = torch.from_numpy(s).to(torch.float)
 
@@ -118,7 +118,7 @@ class LPDataset(InMemoryDataset):
                         gt_primals=gt_primals,
                         # gt_duals=gt_duals,
                         # gt_slacks=gt_slacks,
-                        obj_value=torch.tensor(sol['fun'].astype(np.float32)),
+                        obj_value=0, #torch.tensor(sol['fun'].astype(np.float32)),
                         obj_const=c,
 
                         A_row=row,
@@ -134,7 +134,7 @@ class LPDataset(InMemoryDataset):
                         raise NotImplementedError
 
                     if self.pre_transform is not None:
-                        data = self.pre_transform(data)
+                        data = data #self.pre_transform(data)
                     return data
 
     def process(self):
@@ -148,8 +148,8 @@ class LPDataset(InMemoryDataset):
                 ip_pkgs = pickle.load(file)
 
             for ip_idx in tqdm(range(len(ip_pkgs))):
-                (A, b, c) = ip_pkgs[ip_idx]
-                data = self.prepare_example(A, b, c)
+                (A, b, c, x) = ip_pkgs[ip_idx]
+                data = self.prepare_example(A, b, c, x)
                 data_list.append(data)
 
             torch.save(Batch.from_data_list(data_list), osp.join(self.processed_dir, f'batch{i}.pt'))
@@ -194,7 +194,7 @@ class ILPDataset(InMemoryDataset):
     def processed_file_names(self) -> List[str]:
         return ['data.pt']
 
-    def prepare_example(self,A,b,c):
+    def prepare_example(self,A,b,c,x):
                 
         sp_a = SparseTensor.from_dense(A, has_value=True)
 
@@ -209,16 +209,16 @@ class ILPDataset(InMemoryDataset):
 
         c = c / (c.abs().max() + 1.e-10)  # does not change the result
 
-        A_eq = A.numpy()
-        b_eq = b.numpy()
-        A_ub = None
-        b_ub = None
+        #A_eq = A.numpy()
+        #b_eq = b.numpy()
+        #A_ub = None
+        #b_ub = None
 
         bounds = (0, self.upper_bound)
 
-        sol,obj_val = solve_ilp(c=c.numpy(), A=A_eq, b=b_eq)
+        sol,obj_val = x,0 #solve_ilp(c=c.numpy(), A=A_eq, b=b_eq)
 
-        gt_primals = torch.from_numpy(sol).to(torch.float)
+        gt_primals = sol.to(torch.float)
         # gt_duals = torch.from_numpy(l).to(torch.float)
         # gt_slacks = torch.from_numpy(s).to(torch.float)
 
@@ -286,8 +286,8 @@ class ILPDataset(InMemoryDataset):
                 ip_pkgs = pickle.load(file)
 
             for ip_idx in tqdm(range(len(ip_pkgs))):
-                (A, b, c) = ip_pkgs[ip_idx]
-                data = self.prepare_example(A, b, c)
+                (A, b, c, x) = ip_pkgs[ip_idx]
+                data = self.prepare_example(A, b, c, x)
                 data_list.append(data)
 
             torch.save(Batch.from_data_list(data_list), osp.join(self.processed_dir, f'batch{i}.pt'))

@@ -163,8 +163,8 @@ class TripartiteHeteroGNN(torch.nn.Module):
             self.pred_vals = torch.nn.ModuleList()
             self.pred_cons = torch.nn.ModuleList()
             for layer in range(num_conv_layers):
-                self.pred_vals.append(MLP([2 * hid_dim] + [hid_dim] * (num_pred_layers - 1) + [2]))
-                self.pred_cons.append(MLP([2 * hid_dim] + [hid_dim] * (num_pred_layers - 1) + [2]))
+                self.pred_vals.append(MLP([2 * hid_dim] + [hid_dim] * (num_pred_layers - 1) + [13]))
+                self.pred_cons.append(MLP([2 * hid_dim] + [hid_dim] * (num_pred_layers - 1) + [13]))
 
         self.node_embed = torch.nn.Linear(hid_dim, in_emb_dim)
         self.pos_embed = ScalarEmbeddingSine1D(hid_dim, normalize=False)
@@ -208,7 +208,7 @@ class TripartiteHeteroGNN(torch.nn.Module):
             x_dict[k] = x_emb
         x_l = self.node_embed(self.pos_embed(xt.to(x_dict['vals'].device)))
         x_dict['vals'] = x_l / torch.norm(x_l, dim=1, keepdim=True)
-        time_emb = self.time_embed(self.timestep_embedding(t.to(x_l.device), x_l.shape[1]//2))
+        #time_emb = self.time_embed(self.timestep_embedding(t.to(x_l.device), x_l.shape[1]//2))
         hiddens = []
         for i in range(self.num_layers):
             if self.share_conv_weight:
@@ -223,7 +223,7 @@ class TripartiteHeteroGNN(torch.nn.Module):
             else:
                 h = {k: F.relu(h2[k]) for k in keys}
             h = {k: F.dropout(h[k], p=self.dropout, training=self.training) for k in keys}
-            h['vals'] = h['vals'] + time_emb
+            h['vals'] = h['vals'] #+ time_emb
             x_dict = h
 
         cons, vals = zip(*hiddens)
@@ -301,8 +301,8 @@ class TripartiteHeteroGNNClean(torch.nn.Module):
             self.pred_vals = torch.nn.ModuleList()
             self.pred_cons = torch.nn.ModuleList()
             for layer in range(num_conv_layers):
-                self.pred_vals.append(MLP([2 * hid_dim] + [hid_dim] * (num_pred_layers - 1) + [1]))
-                self.pred_cons.append(MLP([2 * hid_dim] + [hid_dim] * (num_pred_layers - 1) + [1]))
+                self.pred_vals.append(MLP([2 * hid_dim] + [hid_dim] * (num_pred_layers - 1) + [13]))
+                self.pred_cons.append(MLP([2 * hid_dim] + [hid_dim] * (num_pred_layers - 1) + [13]))
 
     def forward(self, data):
         x_dict, edge_index_dict, edge_attr_dict = data.x_dict, data.edge_index_dict, data.edge_attr_dict
