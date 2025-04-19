@@ -1,6 +1,5 @@
-from .hetero_gnn import TripartiteHeteroGNN, TripartiteHeteroGNNClean
+from .hetero_gnn import TripartiteHeteroGNN
 
 models_dict = {
     'TripartiteHeteroGNN': TripartiteHeteroGNN,
-    'TripartiteHeteroGNNClean': TripartiteHeteroGNNClean
     }

@@ -14,9 +14,7 @@ import pytorch_lightning as pl
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
-from data.data_preprocess import HeteroAddLaplacianEigenvectorPE, SubSample
-from data.dataset import LPDataset, ILPDataset
-from torch_geometric.transforms import Compose
+from data.dataset import ProblemsDataset
 
 @hydra.main(config_path="conf", config_name="config")
 def main(cfg: DictConfig):
@@ -27,40 +25,22 @@ def main(cfg: DictConfig):
     np.random.seed(seed)
     random.seed(seed)
 
-    if cfg.data.task == 'sub':
-        ILP = True
-        model_name = 'TripartiteHeteroGNN'
-        dataset = ILPDataset(cfg.data.datapath,
-                        extra_path=f'{cfg.other.ipm_restarts}restarts_'
-                                         f'{cfg.model.params.lappe}lap_'
-                                         f'{cfg.other.ipm_steps}steps'
-                                         f'{"_upper_" + str(cfg.other.upper) if cfg.other.upper is not None else ""}',
-                        upper_bound=cfg.other.upper,
-                        rand_starts=cfg.other.ipm_restarts)
-    else:
-        ILP = False
-        model_name = 'TripartiteHeteroGNNClean'
-        dataset = LPDataset(cfg.data.datapath,
-                        extra_path=f'{cfg.other.ipm_restarts}restarts_'
-                                         f'{cfg.model.params.lappe}lap_'
-                                         f'{cfg.other.ipm_steps}steps'
-                                         f'{"_upper_" + str(cfg.other.upper) if cfg.other.upper is not None else ""}',
-                        upper_bound=cfg.other.upper,
-                        rand_starts=cfg.other.ipm_restarts,
-                        pre_transform=Compose([HeteroAddLaplacianEigenvectorPE(k=cfg.model.params.lappe),
-                                                     SubSample(cfg.other.ipm_steps)]))
 
-    data = Datamodule(dataset, cfg.train.batchsize,cfg.data.num_workers,ILP)
+    model_name = 'TripartiteHeteroGNN'
+    dataset = ProblemsDataset(cfg.data.datapath,
+                        extra_path=f'extra_data')
 
-    model = Pl_model_wrapper(model_name,cfg,cfg.train.device,ILP)
+
+    data = Datamodule(dataset, cfg)
+
+    model = Pl_model_wrapper(model_name,cfg,cfg.train.device)
 
     if os.path.exists(cfg.train.ckpt) and cfg.train.resume:
         print(f"Loading checkpoint from {cfg.train.ckpt}")
         model = model.load_from_checkpoint(cfg.train.ckpt, 
                                          model_name=model_name,
                                          cfg=cfg,
-                                         device=cfg.train.device,
-                                         ILP=ILP)
+                                         device=cfg.train.device)
     
     logger = WandbLogger(project="CG_GNN", name=f"{model_name}")
     

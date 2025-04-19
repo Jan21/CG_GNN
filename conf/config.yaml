@@ -3,7 +3,6 @@ train:
   micro_batch: 4
   patience: 100
   weight_decay: 4.4e-07
-  batchsize: 64
   grad_clip: 0.65
   max_epochs: 30
   device: cuda
@@ -18,6 +17,7 @@ loss:
   
 model:  
   params:
+    num_classes: 13
     in_shape: 2
     lappe: 0
     num_iters: 20
@@ -37,6 +37,9 @@ data:
   task: 'rmp' # rmp, sub
   datapath: '/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/IF/${data.task}' #'/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/knapsack/'
   num_workers: 4
+  batch_size: 64
+  num_val_examples: 500
+  train_proportion: 0.9
 
 other:
   use_wandb: false

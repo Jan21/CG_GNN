@@ -3,31 +3,24 @@ import pytorch_lightning as pl
 #from torch_geometric.loader import DataLoader
 from torch.utils.data import DataLoader
 
-from data.utils import collate_fn_ip, collate_fn_ilp
+from data.utils import collate_fn_ip
 
 
 class Datamodule(pl.LightningDataModule):
-    def __init__(self, dataset, batch_size, num_workers,ILP):
+    def __init__(self, dataset, cfg):
         super(Datamodule, self).__init__()
         self.dataset = dataset
-        self.batch_size = batch_size
-        self.num_workers = num_workers
-        self.ILP = ILP
-        if ILP:
-            self.collate_fn = collate_fn_ilp
-            self.val_size = 500
-            self.val_batch_size = 64
-        else:
-            self.collate_fn = collate_fn_ip
-            self.val_size = 500
-            self.val_batch_size = batch_size
+        self.batch_size = cfg.data.batch_size
+        self.num_workers = cfg.data.num_workers
+        self.collate_fn = collate_fn_ip
+        self.val_size = cfg.data.num_val_examples
+        self.val_batch_size = cfg.data.batch_size
+        self.tr_ratio = cfg.data.train_proportion
 
     def setup(self, stage=None):
-
-
-        self.train_dataset = self.dataset[:int(len(self.dataset) * 0.9)]
-        self.val_dataset = self.dataset[int(len(self.dataset) * 0.9):int(len(self.dataset) * 0.9)+self.val_size]
-        self.test_dataset = self.dataset[int(len(self.dataset) * 0.9)+self.val_size:int(len(self.dataset) * 0.9)+self.val_size]
+        self.train_dataset = self.dataset[:int(len(self.dataset) * self.tr_ratio)]
+        self.val_dataset = self.dataset[int(len(self.dataset) * self.tr_ratio):int(len(self.dataset) * self.tr_ratio)+self.val_size]
+        self.test_dataset = self.dataset[int(len(self.dataset) * self.tr_ratio)+self.val_size:int(len(self.dataset) * self.tr_ratio)+self.val_size]
 
     def train_dataloader(self):
         return DataLoader(self.train_dataset,
