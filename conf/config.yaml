@@ -17,14 +17,14 @@ loss:
   
 model:  
   params:
-    num_classes: 13
+    num_classes: 2
     in_shape: 2
     lappe: 0
-    num_iters: 20
+    num_iters: 8
     conv: gcnconv
     conv_sequence: cov
     dropout: 0.0
-    hidden: 180
+    hidden: 128
     num_conv_layers: 8
     num_mlp_layers: 4
     num_pred_layers: 3  

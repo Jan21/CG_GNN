@@ -14,7 +14,7 @@ import pytorch_lightning as pl
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
-from data.dataset import ProblemsDataset
+from data.dataset import ProblemsDataset, LargeProblemDataset
 
 @hydra.main(config_path="conf", config_name="config")
 def main(cfg: DictConfig):
@@ -27,7 +27,7 @@ def main(cfg: DictConfig):
 
 
     model_name = 'TripartiteHeteroGNN'
-    dataset = ProblemsDataset(cfg.data.datapath,
+    dataset = LargeProblemDataset(cfg.data.datapath,
                         extra_path=f'extra_data')
 
 
@@ -47,7 +47,9 @@ def main(cfg: DictConfig):
     trainer = pl.Trainer(max_epochs=cfg.train.max_epochs, 
                          logger=logger,
                          accelerator="gpu", devices=1,
-                         gradient_clip_val=cfg.train.grad_clip)
+                         gradient_clip_val=cfg.train.grad_clip,
+                         accumulate_grad_batches=cfg.train.num_micro_batches,
+                         precision="16-mixed")
     
     trainer.fit(model, data)
     trainer.save_checkpoint(cfg.other.ckpt)
