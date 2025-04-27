@@ -37,7 +37,7 @@ data:
   task: 'rmp' # rmp, sub
   datapath: '/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/IF/${data.task}' #'/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/knapsack/'
   num_workers: 4
-  batch_size: 64
+  batch_size: 12
   num_val_examples: 500
   train_proportion: 0.9
 
