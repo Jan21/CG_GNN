@@ -8,10 +8,8 @@ import numpy as np
 import torch
 from torch_geometric.data import Batch, HeteroData, InMemoryDataset, Dataset
 from torch_sparse import SparseTensor
-from solver.ilp import solve_ilp
-from solver.linprog import linprog
 from tqdm import tqdm
-
+import networkx as nx
 
 class ProblemsDataset(InMemoryDataset):
 
@@ -171,22 +169,10 @@ class LargeProblemDataset(Dataset):
         # We'll handle the file management ourselves
         return ['metadata.pt']
 
-    def prepare_example(self,A,b,c,x):
+    def prepare_example(self,A,b,c,sol, graph, mis_size):
                 #sp_a = A #SparseTensor.from_dense(A, has_value=True)
                 # Convert A from sparse pytorch tensor to SparseTensor from torch_sparse
-                if not isinstance(A, SparseTensor):
-                    indices = A._indices()
-                    values = A._values()
-                    size = A.size()
-                    sp_a = SparseTensor(row=indices[0], col=indices[1], value=values, sparse_sizes=size)
-                else:
-                    sp_a = A
-                # Convert A to dense torch array if it's a SparseTensor
-                if isinstance(A, SparseTensor):
-                    A = sp_a.to_dense()
-                # If A is already a torch tensor but sparse, convert to dense
-                elif isinstance(A, torch.Tensor) and A.is_sparse:
-                    A = A.to_dense()
+                sp_a = SparseTensor.from_dense(A, has_value=True)
 
                 row = sp_a.storage._row
                 col = sp_a.storage._col
@@ -210,27 +196,10 @@ class LargeProblemDataset(Dataset):
                 #     b_eq = b.numpy()
                 #     A_ub = None
                 #     b_ub = None
-
                 bounds = (0, self.upper_bound)
 
                 for _ in range(self.rand_starts):
-                    # sol = ipm_overleaf(c.numpy(), A_ub, b_ub, A_eq, b_eq, None, max_iter=1000, lin_solver='scipy_cg')
-                    # x = np.stack(sol['xs'], axis=1)  # primal
-
-                    # sol = linprog(c.numpy(),
-                    #               A_ub=A_ub,
-                    #               b_ub=b_ub,
-                    #               A_eq=A_eq, b_eq=b_eq, bounds=bounds,
-                    #               method='interior-point', callback=lambda res: res.x)
-                    # if sol == None:
-                    #     continue
-                    # x = np.stack(sol.intermediate, axis=1)
-                    # assert not np.isnan(sol['fun'])
-
-                    gt_primals = x.to(torch.long) #torch.from_numpy(x).to(torch.float)
-                    # gt_duals = torch.from_numpy(l).to(torch.float)
-                    # gt_slacks = torch.from_numpy(s).to(torch.float)
-
+                    gt_primals = sol
                     data = HeteroData(
                         cons={'x': torch.cat([A.mean(1, keepdims=True),
                                               A.std(1, keepdims=True)], dim=1)},
@@ -238,7 +207,6 @@ class LargeProblemDataset(Dataset):
                                               A.std(0, keepdims=True)], dim=0).T},
                         obj={'x': torch.cat([c.mean(0, keepdims=True),
                                              c.std(0, keepdims=True)], dim=0)[None]},
-
                         cons__to__vals={'edge_index': torch.vstack(torch.where(A)),
                                         'edge_attr': A[torch.where(A)][:, None]},
                         vals__to__cons={'edge_index': torch.vstack(torch.where(A.T)),
@@ -268,7 +236,9 @@ class LargeProblemDataset(Dataset):
                         A_num_col=A.shape[1],
                         A_nnz=len(val),
                         A_tilde_mask=tilde_mask,
-                        rhs=b)
+                        rhs=b,
+                        graph=graph,
+                        mis_size=mis_size)
 
                     if self.pre_filter is not None:
                         raise NotImplementedError
@@ -276,6 +246,26 @@ class LargeProblemDataset(Dataset):
                     if self.pre_transform is not None:
                         data = data #self.pre_transform(data)
                     return data
+
+    def get_graph(self, A):
+        G = nx.Graph()
+        G.add_nodes_from(range(A.shape[1]))
+
+        # For each pair of vertices, check if they share any cliques
+        # If they do, add an edge between them
+        for i in range(A.shape[1]):
+            for j in range(i+1, A.shape[1]):
+                # Get the cliques containing vertex i and j
+                cliques_i = set(np.where(A[:,i] == 1)[0])
+                cliques_j = set(np.where(A[:,j] == 1)[0])
+                
+                # If vertices share any cliques, they are connected
+                if len(cliques_i.intersection(cliques_j)) > 0:
+                    G.add_edge(i,j)
+        # Create a dictionary mapping each node to its neighbors
+        neighbor_dict = {node: set(G.neighbors(node)) for node in G.nodes()}
+        return neighbor_dict
+
 
     def process(self):
         # Create processed directory if it doesn't exist
@@ -294,8 +284,10 @@ class LargeProblemDataset(Dataset):
                 ip_pkgs = pickle.load(file)
 
             for ip_idx in tqdm(range(len(ip_pkgs))):
-                (A, b, c, x) = ip_pkgs[ip_idx]
-                data = self.prepare_example(A, b, c, x)
+                (A, b, c, sol) = ip_pkgs[ip_idx]
+                graph = self.get_graph(A)
+                mis_size = sol.sum()
+                data = self.prepare_example(A, b, c, sol, graph, mis_size)
                 
                 # Apply pre-filter
                 if self.pre_filter is not None and not self.pre_filter(data):

@@ -1,10 +1,10 @@
 train:
-  lr: 0.0005
-  micro_batch: 4
+  lr: 0.001
+  num_micro_batches: 4
   patience: 100
   weight_decay: 4.4e-07
   grad_clip: 0.65
-  max_epochs: 30
+  max_epochs: 100
   device: cuda
   ckpt: '/home/jan/projects/CIIRC/column generation/CG_GNN/outputs/2024-12-31/20-29-15/trained_model.ckpt'
   resume: false
@@ -20,24 +20,25 @@ model:
     num_classes: 2
     in_shape: 2
     lappe: 0
-    num_iters: 8
+    num_val_iters: 100
+    num_train_iters: 20
     conv: gcnconv
     conv_sequence: cov
     dropout: 0.0
-    hidden: 128
-    num_conv_layers: 8
-    num_mlp_layers: 4
-    num_pred_layers: 3  
-    share_conv_weight: false
+    hidden: 64
+    num_conv_layers: 25
+    num_mlp_layers: 2
+    num_pred_layers: 1  
+    share_conv_weight: true
     share_lin_weight: false
     use_norm: true
-    use_res: false  
+    use_res: true 
   
 data:
   task: 'rmp' # rmp, sub
-  datapath: '/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/IF/${data.task}' #'/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/knapsack/'
+  datapath: '/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/MWISP_instances_50nodes_010density/${data.task}' #'/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/knapsack/'
   num_workers: 4
-  batch_size: 12
+  batch_size: 28
   num_val_examples: 500
   train_proportion: 0.9
 

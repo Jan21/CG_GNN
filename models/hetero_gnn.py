@@ -51,7 +51,8 @@ class TripartiteHeteroGNN(torch.nn.Module):
                  share_lin_weight,
                  use_norm,
                  use_res,
-                 num_iters,
+                 num_train_iters,
+                 num_val_iters,
                  in_place=True,
                  conv_sequence='parallel'):
         super().__init__()
@@ -92,14 +93,19 @@ class TripartiteHeteroGNN(torch.nn.Module):
  
 
     
-    def forward(self, data):
+    def forward(self, data, num_iters):
         x_dict, edge_index_dict, edge_attr_dict = data.x_dict, data.edge_index_dict, data.edge_attr_dict
         for k in ['cons', 'vals', 'obj']:
             x_emb = self.encoder[k](x_dict[k])
+            # Sample random unit vector of size hid_dim
+            #rand_vec = torch.randn(x_emb.size(0), x_emb.size(1) // 2, device=x_emb.device)
+            #rand_vec = rand_vec / torch.norm(rand_vec, dim=1, keepdim=True)
+            # Concatenate with the embedding to maintain the expected dimension
+            #x_emb = torch.cat([x_emb[:, :x_emb.size(1) // 2], rand_vec], dim=1)
             x_dict[k] = x_emb
 
         hiddens = []
-        for i in range(self.num_layers):
+        for i in range(num_iters):
             if self.share_conv_weight:
                 i = 0
             h1 = x_dict
@@ -114,8 +120,8 @@ class TripartiteHeteroGNN(torch.nn.Module):
             x_dict = h
 
         cons, vals = zip(*hiddens)
-        vals = torch.cat([self.pred_vals[i](vals[i]) for i in range(self.num_layers)], dim=1)
-        cons = torch.cat([self.pred_cons[i](cons[i]) for i in range(self.num_layers)], dim=1)
+        vals = torch.cat([self.pred_vals[0](vals[-1])], dim=1)
+        cons = torch.cat([self.pred_cons[0](cons[-1])], dim=1)
         return vals, cons
         
 

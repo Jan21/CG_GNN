@@ -36,14 +36,44 @@ def barrier_function(x, t=1.e5):
 
 
 
+
 def collate_fn_ip(graphs: List[Data]):
+    # Add graph_idx to each node before batching
+    edges = []
+    for i, graph in enumerate(graphs):
+        num_nodes = graph.A_num_col  # Number of variables/columns
+        graph.node_graph_idx = torch.full((num_nodes,), i, dtype=torch.long)
+        edges.append(graph['graph'])
+        del graph['graph']
+    
     new_batch = Batch.from_data_list(graphs)
+    
+    # Process rows (constraints)
     row_bias = torch.hstack([new_batch.A_num_row.new_zeros(1), new_batch.A_num_row[:-1]]).cumsum(dim=0)
     row_bias = torch.repeat_interleave(row_bias, new_batch.A_nnz)
     new_batch.A_row += row_bias
+    
+    # Process columns (variables)
     col_bias = torch.hstack([new_batch.A_num_col.new_zeros(1), new_batch.A_num_col[:-1]]).cumsum(dim=0)
     col_bias = torch.repeat_interleave(col_bias, new_batch.A_nnz)
     new_batch.A_col += col_bias
+    
+    new_batch.graph = edges
     return new_batch
 
+
+def uncollate_fn(batch,preds):
+    graph_ids = batch.node_graph_idx
+    # Split predictions according to graph IDs
+    unique_graph_ids = torch.unique(graph_ids)
+    split_preds = []
+    
+    for graph_id in unique_graph_ids:
+        # Create mask for current graph ID
+        mask = (graph_ids == graph_id)
+        # Extract predictions for this graph
+        graph_preds = preds[mask]
+        split_preds.append(graph_preds)
+    
+    return split_preds
 
