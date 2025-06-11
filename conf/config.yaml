@@ -1,6 +1,5 @@
 train:
   lr: 0.001
-  num_micro_batches: 4
   patience: 100
   weight_decay: 4.4e-07
   grad_clip: 0.65
@@ -35,7 +34,7 @@ model:
     use_res: true 
   
 data:
-  task: 'rmp' # rmp, sub
+  task: 'sub' # rmp, sub
   datapath: '/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/MWISP_instances_50nodes_010density/${data.task}' #'/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/knapsack/'
   num_workers: 4
   batch_size: 28

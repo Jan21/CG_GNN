@@ -171,65 +171,6 @@ class Pl_model_wrapper(pl.LightningModule):
         return self.model(batch, num_iters)
 
 
-
-    def _get_loss(self, outputs, batch):
-       """
-       Get the appropriate loss based on supervision mode and training settings.
-       
-       Args:
-           outputs: Model outputs
-           batch: Input batch
-           is_training: Whether this is being called during training or evaluation
-           
-       Returns:
-           Loss tensor
-       """
-       outputs = outputs.view(outputs.shape[0],-1,self.num_classes)
-       scores = outputs[:,-1]
-       votes = scores.softmax(dim=-1)[:,1]      
-       coeff_B = 1.1
-       sources = votes[batch['vals','to','vals'].edge_index[0]]
-       targets = votes[batch['vals','to','vals'].edge_index[1]]
-       term1 = torch.sum(votes)
-       term2 = coeff_B * torch.sum(sources * targets)
-       loss = -term1 + term2
-       return loss
-
-    def compute_loss_old(self,outputs, batch):
-        outputs = outputs.view(outputs.shape[0],-1,self.num_classes)
-        val_preds = outputs[:,-1,:] #[o[:o.shape[0]//2] for o in outputs["final_truth_assignment"]]
-        # Split predictions and labels according to batch indices to handle multiple graphs
-        unbatched_preds = uncollate_fn(batch,val_preds)
-        sols = []
-        is_sizes = []
-        for i,preds in enumerate(unbatched_preds):
-            graph = batch.graph[i]
-            sol, is_size = get_sol_from_preds(preds, graph)
-            sols.append(sol)
-            is_sizes.append(is_size)
-         
-        # Create tensor from is_sizes
-        is_sizes_tensor = torch.tensor(is_sizes, device=val_preds.device)
-        
-        # Get the MIS sizes from the batch
-        mis_sizes = batch['mis_size']
-        
-        # Compute the gap between found IS sizes and optimal MIS sizes
-        # Gap is the difference between optimal MIS size and our found IS size
-        gaps = mis_sizes - is_sizes_tensor
-        
-        # Compute the average gap
-        avg_gap = gaps.float().mean()
-        
-        # Log the ratio of found IS size to optimal MIS size (as a percentage)
-        avg_ratio = (is_sizes_tensor.float() / mis_sizes.float()).mean() * 100.0
-        node_labels = torch.cat(sols)
-
-        loss = torch.nn.functional.cross_entropy(val_preds, node_labels.long())
-        avg_is_size = sum(is_sizes) / len(is_sizes) if is_sizes else 0
-
-        return loss, avg_is_size, avg_gap, avg_ratio
-
     def compute_loss(self,outputs, batch):
         gt_primals = batch.gt_primals
         outputs = outputs.view(outputs.shape[0], -1, self.num_classes)
@@ -276,9 +217,6 @@ class Pl_model_wrapper(pl.LightningModule):
         vals, _ = self(data, self.num_train_iters)
         loss = self.compute_loss(vals, data)  #get_loss(vals, data)
         self.log('train_loss',loss,prog_bar=True, batch_size=batch_size, logger=True)
-        #self.log('train_avg_is_size',avg_is_size,prog_bar=True, batch_size=batch_size, logger=True)
-        #self.log('train_avg_gap',avg_gap,prog_bar=True, batch_size=batch_size, logger=True)
-        #self.log('train_avg_ratio',avg_ratio,prog_bar=True, batch_size=batch_size, logger=True)
         return loss
     
     def validation_step(self, data, batch_idx):
@@ -286,8 +224,6 @@ class Pl_model_wrapper(pl.LightningModule):
         vals, _ = self(data, self.num_val_iters)
         loss = self.compute_loss(vals, data)
         avg_is_size, avg_gap, avg_ratio = self.compute_gap(vals, data)
-        #acc = self.compute_acc(vals, data)
-        #self.log('acc', acc, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
         self.log('val_loss',loss, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
         self.log('val_avg_is_size',avg_is_size, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
         self.log('val_avg_gap',avg_gap, on_step=False, batch_size=batch_size, on_epoch=True, prog_bar=True, logger=True)
