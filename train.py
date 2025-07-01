@@ -14,7 +14,7 @@ import pytorch_lightning as pl
 import hydra
 from omegaconf import DictConfig, OmegaConf
 
-from data.dataset import ProblemsDataset, LargeProblemDataset
+from data.dataset import LargeProblemDataset
 
 @hydra.main(config_path="conf", config_name="config")
 def main(cfg: DictConfig):
