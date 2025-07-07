@@ -46,10 +46,10 @@ def main(cfg: DictConfig):
     
     trainer = pl.Trainer(max_epochs=cfg.train.max_epochs, 
                          logger=logger,
-                         accelerator="gpu", devices=1,
+                         accelerator="cpu", #devices=1,
                          gradient_clip_val=cfg.train.grad_clip,
                          accumulate_grad_batches=cfg.train.num_micro_batches,
-                         precision="16-mixed")
+                         )#precision="16-mixed")
     
     trainer.fit(model, data)
     trainer.save_checkpoint(cfg.other.ckpt)

@@ -36,9 +36,9 @@ model:
   
 data:
   task: 'sub' # rmp, sub
-  datapath: '/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/MWISP_instances_50nodes_010density/${data.task}' #'/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/knapsack/'
+  datapath: '/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/MWISP_instances_300nodes_0.15density/${data.task}' #'/home/jan/projects/CIIRC/column generation/IPM_MPNN/fac6/knapsack/'
   num_workers: 4
-  batch_size: 28
+  batch_size: 12
   num_val_examples: 500
   train_proportion: 0.9
 

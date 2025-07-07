@@ -64,16 +64,26 @@ def collate_fn_ip(graphs: List[Data]):
 
 def uncollate_fn(batch,preds):
     graph_ids = batch.node_graph_idx
+    costs = batch.obj_const
+    primals = batch.gt_primals
     # Split predictions according to graph IDs
     unique_graph_ids = torch.unique(graph_ids)
     split_preds = []
+    split_costs = []
+    objs = []
     
     for graph_id in unique_graph_ids:
         # Create mask for current graph ID
         mask = (graph_ids == graph_id)
         # Extract predictions for this graph
         graph_preds = preds[mask]
+        graph_costs = costs[mask]
+        graph_primals = primals[mask]
         split_preds.append(graph_preds)
+        split_costs.append(graph_costs)
+        # Compute inner product between primals and costs for this graph
+        obj = (graph_primals * graph_costs).sum()
+        objs.append(obj)
     
-    return split_preds
+    return split_preds, split_costs, objs
 

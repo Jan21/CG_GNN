@@ -105,7 +105,7 @@ def run_sampling_task(args):
 
 
 
-def get_sol_from_preds(val_preds, G):
+def get_sol_from_preds(val_preds, G,costs):
     # Create a copy of the predictions to avoid modifying the original tensor
     preds_copy = val_preds.clone().detach()
     # Apply softmax to convert logits to probabilities
@@ -129,14 +129,16 @@ def get_sol_from_preds(val_preds, G):
     # Sequential approach for larger graphs that's still efficient
     sampled_sets = []
     largest_set = set()
-    
+    largest_obj = -float('inf')
     # Try sequential approach with different seeds
     for i in range(num_samples):
         random.seed(base_seed + i)
         result = sample_large_is(G, preds, alpha_value)
-        if len(result) > len(largest_set):
+        obj = costs[list(result)].sum()
+        if obj > largest_obj:
+            largest_obj = obj
             largest_set = result
-    
+
     # Convert the set of chosen nodes to a binary tensor - use vectorized operation
     binary_solution = torch.zeros(len(G), dtype=torch.long, device=val_preds.device)
     if largest_set:
@@ -144,7 +146,7 @@ def get_sol_from_preds(val_preds, G):
         binary_solution[list(largest_set)] = 1
     
     is_size = binary_solution.sum()
-    return binary_solution, is_size
+    return binary_solution, largest_obj
 
 
 
@@ -183,12 +185,12 @@ class Pl_model_wrapper(pl.LightningModule):
         outputs = outputs.view(outputs.shape[0],-1,self.num_classes)
         val_preds = outputs[:,-1,:] #[o[:o.shape[0]//2] for o in outputs["final_truth_assignment"]]
         # Split predictions and labels according to batch indices to handle multiple graphs
-        unbatched_preds = uncollate_fn(batch,val_preds)
+        unbatched_preds,unbatched_costs,objs = uncollate_fn(batch,val_preds)
         sols = []
         is_sizes = []
         for i,preds in enumerate(unbatched_preds):
             graph = batch.graph[i]
-            sol, is_size = get_sol_from_preds(preds, graph)
+            sol, is_size = get_sol_from_preds(preds, graph,unbatched_costs[i])
             sols.append(sol)
             is_sizes.append(is_size)
          
@@ -196,7 +198,7 @@ class Pl_model_wrapper(pl.LightningModule):
         is_sizes_tensor = torch.tensor(is_sizes, device=val_preds.device)
         
         # Get the MIS sizes from the batch
-        mis_sizes = batch['mis_size']
+        mis_sizes = torch.tensor(objs, device=val_preds.device)
         
         # Compute the gap between found IS sizes and optimal MIS sizes
         # Gap is the difference between optimal MIS size and our found IS size
